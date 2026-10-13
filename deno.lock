@@ -1,0 +1,35 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@hono/hono@^4.11.7": "4.11.7",
+    "jsr:@std/assert@^1.0.18": "1.0.18",
+    "jsr:@std/internal@^1.0.12": "1.0.14",
+    "npm:postgres@3.4.5": "3.4.5"
+  },
+  "jsr": {
+    "@hono/hono@4.11.7": {
+      "integrity": "2a0dc00088fbef98b76f575e3c4ab3d2c770d5e6095be215ae05c2aef25b363a"
+    },
+    "@std/assert@1.0.18": {
+      "integrity": "270245e9c2c13b446286de475131dc688ca9abcd94fc5db41d43a219b34d1c78",
+      "dependencies": [
+        "jsr:@std/internal"
+      ]
+    },
+    "@std/internal@1.0.14": {
+      "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
+    }
+  },
+  "npm": {
+    "postgres@3.4.5": {
+      "integrity": "sha512-cDWgoah1Gez9rN3H4165peY9qfpEo+SA61oQv65O3cRUE1pOEoJWwddwcqKE8XZYjbblOJlYDlLV4h67HrEVDg=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "jsr:@hono/hono@^4.11.7",
+      "jsr:@std/assert@^1.0.18",
+      "npm:postgres@3.4.5"
+    ]
+  }
+}

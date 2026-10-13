@@ -1,0 +1,8 @@
+.DS_Store
+.env
+.env.*
+*.log
+
+# Local database and runtime data (deno task db:start, uploads, exports)
+.pgdata/
+data/

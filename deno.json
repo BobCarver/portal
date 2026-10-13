@@ -1,0 +1,31 @@
+{
+  "tasks": {
+    "dev": "deno run --watch --allow-net --allow-env --allow-read --allow-write --allow-run=ffmpeg src/main.ts",
+    "start": "deno run --allow-net --allow-env --allow-read --allow-write --allow-run=ffmpeg src/main.ts",
+    "worker": "deno run --allow-net --allow-env --allow-read --allow-write --allow-run=ffmpeg src/worker.ts",
+    "migrate": "deno run --allow-net --allow-env --allow-read scripts/migrate.ts",
+    "admin": "deno run --allow-net --allow-env --allow-read scripts/create-admin.ts",
+    "seed": "deno run --allow-net --allow-env --allow-read --allow-write --allow-run=ffmpeg scripts/seed.ts",
+    "db:start": "sh scripts/dev-db.sh start",
+    "db:stop": "sh scripts/dev-db.sh stop",
+    "check": "deno check --quiet src scripts tests",
+    "fmt": "deno fmt",
+    "lint": "deno lint",
+    "static": "deno task check && deno task lint && deno fmt --check",
+    "test": "deno task test:unit && deno task test:integration",
+    "test:unit": "deno test --allow-read --allow-write --allow-env --allow-run=ffmpeg,unzip tests/unit",
+    "test:integration": "deno test --allow-net --allow-read --allow-write --allow-env --allow-run=ffmpeg,unzip tests/integration"
+  },
+  "fmt": {
+    "include": ["src/", "scripts/", "tests/"]
+  },
+  "lint": {
+    "include": ["src/", "scripts/", "tests/"]
+  },
+  "imports": {
+    "@hono/hono": "jsr:@hono/hono@^4.11.7",
+    "@std/assert": "jsr:@std/assert@^1.0.18",
+    "postgres": "npm:postgres@3.4.5",
+    "festival-bundle": "../sse-app/shared/festival-bundle/mod.ts"
+  }
+}
