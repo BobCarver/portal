@@ -1,12 +1,7 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import type { FestivalData } from "festival-bundle";
 import { crc32, writeStoredZip } from "../../src/export/zip.ts";
-import {
-  checkAgainstBundle,
-  checkPush,
-  type ScorePush,
-  tallyResults,
-} from "../../src/scores.ts";
+import { tallyResults } from "../../src/scores.ts";
 
 Deno.test("zip: crc32 check value", () => {
   assertEquals(crc32(new TextEncoder().encode("123456789")), 0xcbf43926);
@@ -97,89 +92,6 @@ const DATA: FestivalData = {
     }],
   },
 };
-
-const push = (scores: ScorePush["scores"]): ScorePush => ({
-  festival_id: 1,
-  bundle_digest: "d",
-  digest: "x",
-  final: false,
-  sent_at: "2026-10-20T19:00:00Z",
-  scores,
-  skips: [],
-});
-
-Deno.test("score push: shape, range and one decimal", () => {
-  assertEquals(
-    checkPush(
-      push([{
-        competition_id: 100,
-        competitor_id: 1001,
-        judge_id: 7,
-        criteria_id: 1,
-        score: 7.5,
-      }]),
-    ),
-    [],
-  );
-  const bad = checkPush(push([
-    {
-      competition_id: 100,
-      competitor_id: 1001,
-      judge_id: 7,
-      criteria_id: 1,
-      score: 7.25,
-    },
-    {
-      competition_id: 100,
-      competitor_id: 1001,
-      judge_id: 7,
-      criteria_id: 2,
-      score: 11,
-    },
-    {
-      competition_id: 100,
-      competitor_id: 1001,
-      judge_id: 7,
-      criteria_id: 2,
-      score: 5,
-    },
-  ]));
-  assertEquals(bad.length, 3, bad.join("\n"));
-  assert(checkPush({ nope: 1 }).length > 0);
-  assert(checkPush("text").length > 0);
-});
-
-Deno.test("score push: rows must belong to the bundle", () => {
-  const errs = checkAgainstBundle(
-    push([
-      {
-        competition_id: 100,
-        competitor_id: 1001,
-        judge_id: 8,
-        criteria_id: 1,
-        score: 5,
-      },
-      {
-        competition_id: 100,
-        competitor_id: 1001,
-        judge_id: 8,
-        criteria_id: 2,
-        score: 5,
-      },
-      {
-        competition_id: 100,
-        competitor_id: 9999,
-        judge_id: 7,
-        criteria_id: 1,
-        score: 5,
-      },
-    ]),
-    DATA,
-  );
-  assertEquals(errs.length, 2, errs.join("\n"));
-  assertStringIncludes(errs[0], "judge 8 does not score criterion 2");
-  assertStringIncludes(errs[1], "competitor 9999 is not in competition 100");
-});
 
 Deno.test("results: weighted totals, ranked", () => {
   const t = tallyResults(DATA, [

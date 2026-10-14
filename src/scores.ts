@@ -1,4 +1,10 @@
-import type { FestivalData } from "festival-bundle";
+import {
+  checkScoresAgainstBundle,
+  type FestivalData,
+  type ScorePush,
+  type ScoreRow,
+  validateScorePush,
+} from "festival-bundle";
 import type { AppContext } from "./context.ts";
 import { logEvent } from "./db.ts";
 
@@ -6,36 +12,9 @@ import { logEvent } from "./db.ts";
  * The score receiver (portal.md section 9). The competition server POSTs the
  * festival's whole set of scores (and skips); the portal replaces that
  * festival's scores in one transaction, so missed pushes, corrections and
- * deletes need no special handling. The shape matches `CloudPayload` in the
- * competition server's `cloudPush.ts`.
+ * deletes need no special handling. The payload and its checks are the shared
+ * contract in festival-bundle (`score-push.ts`), which the server sends with.
  */
-
-export interface ScoreRow {
-  competition_id: number;
-  competitor_id: number;
-  judge_id: number;
-  criteria_id: number;
-  score: number;
-}
-
-export interface SkipRow {
-  session_id: number;
-  competition_id: number;
-  competitor_id: number;
-  stage: string;
-  actor: string;
-  reason: string;
-}
-
-export interface ScorePush {
-  festival_id: number;
-  bundle_digest: string;
-  digest: string;
-  final: boolean;
-  sent_at: string;
-  scores: ScoreRow[];
-  skips: SkipRow[];
-}
 
 export type ReceiveResult =
   | { status: 200; body: { ok: true; applied: boolean; reason?: string } }
@@ -46,109 +25,6 @@ export type ReceiveResult =
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
-const isId = (v: unknown): v is number =>
-  Number.isInteger(v) && (v as number) > 0;
-
-/** Shape checks; returns readable problems (empty = valid). */
-export function checkPush(raw: unknown): string[] {
-  if (!isObj(raw)) return ["body must be a JSON object"];
-  const bad: string[] = [];
-  if (!isId(raw.festival_id)) {
-    bad.push("festival_id must be a positive integer");
-  }
-  for (const k of ["bundle_digest", "digest", "sent_at"]) {
-    if (typeof raw[k] !== "string" || raw[k] === "") {
-      bad.push(`${k} must be text`);
-    }
-  }
-  if (
-    typeof raw.sent_at === "string" && Number.isNaN(Date.parse(raw.sent_at))
-  ) {
-    bad.push("sent_at must be an ISO time");
-  }
-  if (typeof raw.final !== "boolean") bad.push("final must be true or false");
-  if (!Array.isArray(raw.scores)) bad.push("scores must be a list");
-  if (raw.skips !== undefined && !Array.isArray(raw.skips)) {
-    bad.push("skips must be a list");
-  }
-  if (bad.length) return bad;
-
-  const seen = new Set<string>();
-  for (const [i, r] of (raw.scores as unknown[]).entries()) {
-    if (bad.length >= 20) break;
-    if (
-      !isObj(r) || !isId(r.competition_id) || !isId(r.competitor_id) ||
-      !isId(r.judge_id) || !isId(r.criteria_id)
-    ) {
-      bad.push(`scores[${i}]: ids must be positive integers`);
-      continue;
-    }
-    const s = r.score;
-    if (
-      typeof s !== "number" || s < 1 || s > 10 ||
-      Math.abs(Math.round(s * 10) - s * 10) > 1e-6
-    ) {
-      bad.push(`scores[${i}]: score must be 1-10 with at most one decimal`);
-    }
-    const key =
-      `${r.competition_id}/${r.competitor_id}/${r.judge_id}/${r.criteria_id}`;
-    if (seen.has(key)) bad.push(`scores[${i}]: ${key} is listed twice`);
-    seen.add(key);
-  }
-  for (const [i, r] of ((raw.skips as unknown[]) ?? []).entries()) {
-    if (bad.length >= 20) break;
-    if (
-      !isObj(r) || !isId(r.session_id) || !isId(r.competition_id) ||
-      !isId(r.competitor_id) || typeof r.stage !== "string" ||
-      typeof r.actor !== "string" || typeof r.reason !== "string"
-    ) {
-      bad.push(
-        `skips[${i}]: needs session_id, competition_id, competitor_id, stage, actor, reason`,
-      );
-    }
-  }
-  return bad;
-}
-
-/** Rows that do not belong to the bundle (unknown entry, judge or criterion). */
-export function checkAgainstBundle(
-  push: ScorePush,
-  data: FestivalData,
-): string[] {
-  const rubrics = new Map(data.festival.rubrics.map((r) => [r.id, r]));
-  const entries = new Set<string>();
-  const scorable = new Map<number, Set<string>>(); // competition -> judge/criterion
-  for (const t of data.festival.tracks) {
-    for (const s of t.sessions) {
-      for (const c of s.competitions) {
-        for (const p of c.competitors) entries.add(`${c.id}/${p.id}`);
-        const pairs = new Set<string>();
-        for (const j of rubrics.get(c.rubric_id)?.judges ?? []) {
-          for (const k of j.criteria) pairs.add(`${j.id}/${k}`);
-        }
-        scorable.set(c.id, pairs);
-      }
-    }
-  }
-  const bad: string[] = [];
-  for (const r of push.scores) {
-    if (bad.length >= 20) break;
-    const where =
-      `score ${r.competition_id}/${r.competitor_id}/${r.judge_id}/${r.criteria_id}`;
-    if (!entries.has(`${r.competition_id}/${r.competitor_id}`)) {
-      bad.push(
-        `${where}: competitor ${r.competitor_id} is not in competition ${r.competition_id}`,
-      );
-    } else if (
-      !scorable.get(r.competition_id)?.has(`${r.judge_id}/${r.criteria_id}`)
-    ) {
-      bad.push(
-        `${where}: judge ${r.judge_id} does not score criterion ${r.criteria_id} there`,
-      );
-    }
-  }
-  return bad;
-}
 
 export async function receiveScores(
   ctx: AppContext,
@@ -179,10 +55,9 @@ export async function receiveScores(
     return { status, body: { ok: false, error, details } };
   };
 
-  const shape = checkPush(raw);
+  const shape = validateScorePush(raw);
   if (shape.length) return fail(400, "the push is not valid", shape);
-  const push = raw as unknown as ScorePush;
-  push.skips ??= [];
+  const push = raw as ScorePush;
   if (push.festival_id !== festivalId) {
     return fail(
       403,
@@ -209,7 +84,7 @@ export async function receiveScores(
         : "the scores belong to a bundle this portal did not export",
     );
   }
-  const refs = checkAgainstBundle(push, JSON.parse(match.data_text));
+  const refs = checkScoresAgainstBundle(push, JSON.parse(match.data_text));
   if (refs.length) return fail(422, "the scores do not match the bundle", refs);
 
   const sentAt = new Date(push.sent_at);
