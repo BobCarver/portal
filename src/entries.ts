@@ -14,7 +14,6 @@ export const COMPETITOR_TYPES: CompetitorType[] = [
   "couple",
   "team",
 ];
-const MAX_DURATION = 60 * 60;
 
 export async function createCompetitor(
   ctx: AppContext,
@@ -136,24 +135,13 @@ export async function removeMember(
   });
 }
 
-export function checkDuration(seconds: number): number {
-  if (!Number.isInteger(seconds) || seconds <= 0 || seconds > MAX_DURATION) {
-    throw new UserError(
-      "The duration must be between 1 second and 60 minutes.",
-      422,
-    );
-  }
-  return seconds;
-}
-
 /** Enter a competitor into a competition (once), at the end of the running order. */
 export async function enter(
   ctx: AppContext,
   user: User,
-  input: { competitorId: number; competitionId: number; duration: number },
+  input: { competitorId: number; competitionId: number },
 ): Promise<number> {
   await assertMember(ctx.sql, user, input.competitorId);
-  checkDuration(input.duration);
   const festivalId = await festivalOf(
     ctx.sql,
     "competition",
@@ -186,8 +174,8 @@ export async function enter(
       }
       const order = await nextOrder(tx, "entries", input.competitionId);
       const [row] = await tx<{ id: number }[]>`
-        INSERT INTO entries (competition_id, competitor_id, duration, order_number)
-        VALUES (${input.competitionId}, ${input.competitorId}, ${input.duration}, ${order})
+        INSERT INTO entries (competition_id, competitor_id, order_number)
+        VALUES (${input.competitionId}, ${input.competitorId}, ${order})
         RETURNING id`;
       await logEvent(tx, {
         festivalId,
@@ -271,18 +259,6 @@ export function assertCanEdit(x: { canEdit: boolean; state: FestivalState }) {
       409,
     );
   }
-}
-
-export async function setDuration(
-  ctx: AppContext,
-  user: User,
-  entryId: number,
-  seconds: number,
-) {
-  const x = await entryForUser(ctx, user, entryId);
-  assertCanEdit(x);
-  checkDuration(seconds);
-  await ctx.sql`UPDATE entries SET duration = ${seconds} WHERE id = ${entryId}`;
 }
 
 /** Withdraw (competitor) or remove (organiser) an entry; the order closes up. */

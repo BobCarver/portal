@@ -74,13 +74,53 @@ members are added or removed, when a person's profile changes, when a competitio
 rules or the festival's age date change, and again at export. A change that would
 break an entry is refused, and nothing is saved.
 
+## 2b. Planning: stages, sessions and running order
+
+The organiser can have the portal plan the schedule instead of building it by hand.
+Tracks are the festival's stages; each stage runs sessions; each session runs
+competitions in order.
+
+- **Length.** A session's length is the sum, over its competitions' entries, of the
+  music's length plus a time per entry (default 1 minute: announcing, scoring, entry
+  and exit). Music lengths are measured once, during normalisation, and cached in
+  `entries.duration`; planning never runs ffmpeg or ffprobe.
+- **Judges.** A competition's judges are its rubric's judges. Competitions that share
+  a judge (directly or through other competitions) are linked and stay on one stage,
+  so a judge is never needed on two stages at once and never changes stage. The number
+  of separate groups of judges is the most stages that can run at the same time.
+  Inside a session, competitions with the same judges run together, and each next
+  panel is as close as possible to the last.
+- **Time.** Stages run their sessions in parallel time slots. A slot starts after the
+  longest session of the slot before plus a break; start times are rounded up to five
+  minutes. Sessions are never back to back.
+- **People.** A clash is one person (a soloist, a partner or a team member) with two
+  performances on different stages that overlap or are less than a gap apart (default
+  10 minutes). Each entry's estimated time follows from its session's start and the
+  lengths of everything before it. Clashes are resolved in the cheapest way first:
+  moving an entry within its competition, then moving a competition within its
+  session (keeping same-judge competitions together), and only then putting the
+  person's competitions in different time slots. A clash that cannot be resolved is
+  reported, with who and when.
+- **Running order.** The current running order of entries (registration order unless
+  the organiser changed it) is kept unless moving an entry avoids a clash. Applying a
+  plan writes the order of competitions and of their entries.
+- **Balance.** Sessions are of similar length, and stages carry similar totals.
+- **Variants.** The organiser compares numbers of stages and sessions per stage (with
+  clashes, empty sessions, session lengths, judge changes, entries moved and finish
+  time), previews
+  one and applies it. Applying replaces every session and the running order of
+  competitions; competitions without entries are left unscheduled. The plan is
+  deterministic: applying recomputes exactly what was previewed. Manual edits remain
+  possible afterwards.
+
 ## 3. Functional requirements
 
 ### Competitor
 - Register an account; create a competitor (type `individual` | `couple` | `team`,
   with member accounts).
 - Enter a competition: choose from competitions that are open; a competitor can only
-  enter a competition once; set the performance duration (stored in **seconds**).
+  enter a competition once. An entry's duration is not typed in: it is the length of
+  its music, measured once when the music is normalised and stored in **seconds**.
 - Upload **music** and, optionally, an **announcement** per entry (`kind` =
   `music` | `announce`). Replace freely until the freeze. See section 6.
 - See the status of each file (`processing`, `ready`, `failed` with a reason), play

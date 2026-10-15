@@ -163,3 +163,29 @@ async function ffmpeg(opts: LoudnormOptions, args: string[]): Promise<string> {
   }
   return stderr;
 }
+
+/** The length of an audio file in seconds, from ffprobe. */
+export async function lengthOf(
+  path: string,
+  ffprobe = "ffprobe",
+): Promise<number> {
+  const out = await new Deno.Command(ffprobe, {
+    args: [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
+      path,
+    ],
+    stdin: "null",
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+  const seconds = Number(new TextDecoder().decode(out.stdout).trim());
+  if (!out.success || !Number.isFinite(seconds)) {
+    throw new Error(`ffprobe could not read the length of ${path}`);
+  }
+  return seconds;
+}

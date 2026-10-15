@@ -1,7 +1,7 @@
 import type { AppContext } from "../context.ts";
 import { sha256Hex } from "../crypto.ts";
-import { logEvent } from "../db.ts";
-import { AudioRejected, normalise } from "./loudnorm.ts";
+import { logEvent, type Tx } from "../db.ts";
+import { AudioRejected, lengthOf, normalise } from "./loudnorm.ts";
 
 /**
  * The normalisation worker: takes jobs from `audio_jobs` (a table-backed queue,
@@ -42,6 +42,42 @@ export async function runOne(ctx: AppContext): Promise<boolean> {
 }
 
 /** Run jobs until none is due (tests, scripts). */
+/** The entry's duration is its music's length, in whole seconds. */
+function setEntryLength(sql: Tx, entryId: number, seconds: number) {
+  return sql`UPDATE entries SET duration = ${
+    Math.round(seconds)
+  } WHERE id = ${entryId}`;
+}
+
+/**
+ * Measure ready files that have no length yet (normalised before lengths were
+ * recorded), and give their entries a duration. Cheap: no re-normalising.
+ */
+export async function measureMissing(ctx: AppContext): Promise<number> {
+  const files = await ctx.sql<
+    { id: number; entry_id: number; kind: string; storage_key: string }[]
+  >`
+    SELECT id, entry_id, kind, storage_key FROM audio_files
+    WHERE status = 'ready' AND seconds IS NULL`;
+  let measured = 0;
+  for (const f of files) {
+    try {
+      const seconds = await ctx.storage.withLocalPath(
+        f.storage_key,
+        (p) => lengthOf(p),
+      );
+      await ctx.sql.begin(async (tx) => {
+        await tx`UPDATE audio_files SET seconds = ${seconds} WHERE id = ${f.id}`;
+        if (f.kind === "music") await setEntryLength(tx, f.entry_id, seconds);
+      });
+      measured++;
+    } catch (err) {
+      console.error(`worker: could not measure file ${f.id}:`, err);
+    }
+  }
+  return measured;
+}
+
 export async function drain(ctx: AppContext): Promise<number> {
   let n = 0;
   while (await runOne(ctx)) n++;
@@ -85,6 +121,7 @@ async function runJob(ctx: AppContext, job: Job): Promise<void> {
           sampleRate: a.sampleRate,
         }),
     );
+    const seconds = await lengthOf(out);
     const bytes = await Deno.readFile(out);
     const sha = await sha256Hex(bytes);
     const key = `normalised/${sha}.mp3`;
@@ -97,8 +134,11 @@ async function runJob(ctx: AppContext, job: Job): Promise<void> {
           sha256 = ${sha}, bytes = ${bytes.length}, content_type = 'audio/mpeg',
           target_lufs = ${target}, lufs = ${result.lufs},
           true_peak_db = ${result.truePeakDb}, flag = ${result.flag},
-          processed_at = now()
+          seconds = ${seconds}, processed_at = now()
         WHERE id = ${file.id} AND status = 'processing'`;
+      if (file.kind === "music") {
+        await setEntryLength(tx, file.entry_id, seconds);
+      }
       await tx`UPDATE audio_jobs SET status = 'done', finished_at = now(), error = NULL
         WHERE id = ${job.id}`;
       await logEvent(tx, {
@@ -148,6 +188,7 @@ export function startWorker(
 ): { wake: () => void; done: Promise<void> } {
   let wake = () => {};
   const done = (async () => {
+    await measureMissing(ctx).catch((err) => console.error("worker:", err));
     while (!signal.aborted) {
       let ran = false;
       try {

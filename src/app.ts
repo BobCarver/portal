@@ -8,6 +8,7 @@ import { UserError } from "./errors.ts";
 import { adminRoutes } from "./routes/admin.ts";
 import { apiRoutes } from "./routes/api.ts";
 import { authRoutes } from "./routes/auth.ts";
+import { planRoutes } from "./routes/plan.ts";
 import { competitorRoutes } from "./routes/competitor.ts";
 import { type Html, html } from "./views/html.ts";
 import { layout } from "./views/layout.ts";
@@ -130,6 +131,7 @@ export function createApp(ctx: AppContext): Hono<AppEnv> {
   authRoutes(app, ctx);
   competitorRoutes(app, ctx);
   adminRoutes(app, ctx);
+  planRoutes(app, ctx);
   apiRoutes(app, ctx);
   app.notFound((c) =>
     c.req.path.startsWith("/api/")

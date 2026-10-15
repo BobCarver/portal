@@ -73,6 +73,10 @@ export async function acceptUpload(
         ${u.name.slice(0, 200)}, ${format}, ${u.userId})
       RETURNING id`;
     await tx`INSERT INTO audio_jobs (audio_file_id) VALUES (${row.id})`;
+    // The entry's length is its music's: unknown again until this file is ready.
+    if (u.kind === "music") {
+      await tx`UPDATE entries SET duration = 0 WHERE id = ${u.entryId}`;
+    }
     await logEvent(tx, {
       festivalId: u.festivalId,
       userId: u.userId,
@@ -101,6 +105,9 @@ export async function rejectAudio(
     WHERE a.id = ${fileId} AND e.id = a.entry_id
     RETURNING c.festival_id`;
   if (!row) throw new UserError("No such file.", 404);
+  // Rejected music has no usable length.
+  await ctx.sql`UPDATE entries SET duration = 0
+    WHERE id = (SELECT entry_id FROM audio_files WHERE id = ${fileId} AND kind = 'music')`;
   await logEvent(ctx.sql, {
     festivalId: row.festival_id,
     userId,

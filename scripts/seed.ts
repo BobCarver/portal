@@ -172,29 +172,26 @@ async function competitor(
   return id;
 }
 
-// Each competitor enters one competition: [competitor, competition, seconds].
 const solo = await competitor("Dana Lee", "individual", []);
 const mixed = await competitor("Dana and Sam", "couple", [user.sam]);
 const sameGender = await competitor("Kim and Lou", "couple", [user.lou]);
 const team = await competitor("The Night Owls", "team", [user.sam, user.kim]);
 
+// [competitor, competition, music seconds]: the entry's length comes from its
+// music. Kept short so the fixture bundle stays small.
 const entries: [number, number, number][] = [
-  [solo, comps[0].id, 95],
-  [mixed, comps[1].id, 150],
-  [sameGender, comps[2].id, 140],
-  [team, comps[3].id, 180],
+  [solo, comps[0].id, 3],
+  [mixed, comps[1].id, 5],
+  [sameGender, comps[2].id, 4],
+  [team, comps[3].id, 6],
 ];
 let freq = 220;
-for (const [competitorId, competitionId, duration] of entries) {
-  const entryId = await enter(ctx, dana, {
-    competitorId,
-    competitionId,
-    duration,
-  });
+for (const [competitorId, competitionId, seconds] of entries) {
+  const entryId = await enter(ctx, dana, { competitorId, competitionId });
   await acceptUpload(ctx, {
     entryId,
     kind: "music",
-    data: await tone(freq += 55, 3),
+    data: await tone(freq += 55, seconds),
     name: `${competitorId}.wav`,
     userId: dana.id,
     festivalId: f.id,

@@ -163,6 +163,22 @@ Sizes are rough: **S** is under half a day, **M** a day or two, **L** more.
     long it takes.
   - The worker retrying after a temporary error.
 
+### Planning
+
+- [ ] **Days (M).** Plans are one run of slots from a start time. Add day windows
+  (for example 09:00 to 21:00 over two days) so slots wrap to the next day.
+- [ ] **Pin choices (M).** Let the organiser fix a competition to a stage or slot
+  (for example juniors in the morning), and let some competitions need a particular
+  stage.
+- [ ] **Split linked judge groups (L).** Competitions linked through a shared judge stay
+  on one stage. They could run on two stages at different times; the planner does not
+  try that yet.
+- [ ] **Rest on the same stage (S).** The gap applies to performances on different
+  stages. A person can still have two performances back to back on the same stage
+  (for example a solo, then a couple), which may be too close for a costume change.
+- [ ] **Order inside a session (S).** Beyond grouping by judges, a preferred order such
+  as youngest first.
+
 ## 4. Later
 
 - [ ] **Live view during the event.** The score push may later carry the venue's

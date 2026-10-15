@@ -55,7 +55,7 @@ ffmpeg with libmp3lame must be on the PATH. Tests run it for real, and use `unzi
 ## Layout
 
 ```
-db/                  migrations, plain SQL, run in name order (001_init, 002_unscheduled_competitions, 003_categories)
+db/                  migrations, plain SQL, run in name order (001_init … 004_music_length)
 src/
   main.ts            web process: migrate, inline worker, Deno.serve
   worker.ts          worker process (WORKER=separate)
@@ -67,12 +67,14 @@ src/
   eligibility.ts     the category rules as pure functions (gender, age band, level): no database
   categories.ts      the database side of those rules: load members and a competition, re-check entries
   profile.ts         a person's gender, date of birth and level; changing them re-checks their entries
+  plan/planner.ts    the schedule planner as pure functions: stages, sessions, order, times, score
+  plan/db.ts         load a festival for the planner (cached lengths); apply a plan in one transaction
   festival.ts        festivalState: what may change now (freeze, final export)
   order.ts           running order: nextOrder, renumber, moveTo/moveBy, closeGaps
   scores.ts          score receiver (uses the shared push checks) and results tally
   audio/             sniff.ts (format from bytes), loudnorm.ts (ffmpeg), audio.ts (upload), worker.ts (queue)
   export/            exporter.ts (snapshot -> tree -> bundle), zip.ts (stored zip, zip64)
-  routes/            auth, competitor, admin, api (venue token)
+  routes/            auth, competitor, admin, plan (organiser planning page), api (venue token)
   views/             html.ts (escaping template tag), layout.ts (page shell, helpers)
   storage.ts         Storage interface + disk; keys like originals/<sha>.mp3
   mail.ts            Mailer interface; ConsoleMailer prints to the log
@@ -122,6 +124,13 @@ tests/integration    whole flow over HTTP with real Postgres and ffmpeg
   change, and in the exporter. Those writes run in a transaction that re-checks the
   affected entries, so a refused change is rolled back. The categories never reach a
   bundle: the competition server does not need them.
+- **Lengths and planning** (portal.md section 2b). An entry's duration is its music's
+  length: the worker measures each normalised file once with ffprobe and caches it in
+  `audio_files.seconds` and `entries.duration` (0 until the music is ready). The planner
+  only reads that cache. Linked judge groups stay on one stage. A people clash is two
+  performances by one person on different stages less than `gapMinutes` apart, from the
+  estimated times; the planner fixes clashes by moving entries, then competitions, and
+  only then by splitting sessions strictly by slot. Ties go to the earliest finish.
 - **Auth.** Routes call `needUser` / `needAdmin`. Competitor data goes through
   `assertMember`. Forms are protected by the Origin check (Hono `csrf`). The venue
   API (`/api/*`) has no cookies: it uses a per-festival bearer token, stored only as

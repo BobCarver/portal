@@ -168,7 +168,6 @@ Deno.test({
       r = await alex.post("/entries", {
         competitor_id: String(alexId),
         competition_id: String(solo.id),
-        duration: "1:35",
       });
       assertStringIncludes(redirected(r).err ?? "", "not open");
 
@@ -185,13 +184,11 @@ Deno.test({
         r = await alex.post("/entries", {
           competitor_id: String(alexId),
           competition_id: String(solo.id),
-          duration: "1:35",
         });
         assertEquals(redirected(r).ok, "Entered. Now upload your music.");
         r = await alex.post("/entries", {
           competitor_id: String(alexId),
           competition_id: String(solo.id),
-          duration: "95",
         });
         assertStringIncludes(redirected(r).err ?? "", "already entered");
         // Someone else cannot use Alex's competitor.
@@ -200,7 +197,6 @@ Deno.test({
         r = await mallory.post("/entries", {
           competitor_id: String(alexId),
           competition_id: String(couples.id),
-          duration: "60",
         });
         assertStringIncludes(redirected(r).err ?? "", "not a member");
         assertEquals((await mallory.get(`/competitors/${alexId}`)).status, 403);
@@ -227,12 +223,10 @@ Deno.test({
       await sam.post("/entries", {
         competitor_id: String(samKimId),
         competition_id: String(couples.id),
-        duration: "120",
       });
       await alex.post("/entries", {
         competitor_id: String(alexId),
         competition_id: String(couples.id),
-        duration: "90",
       });
 
       const entries = await ctx.sql<
@@ -333,6 +327,15 @@ Deno.test({
           assert(
             Math.abs(files[0].lufs + 15) <= 1,
             `music near -15 LUFS: ${files[0].lufs}`,
+          );
+          // Lengths come from the music: a 2 s tone, a 1 s silence; the
+          // announcement does not count toward the entry's length.
+          const lengths = await ctx.sql`
+            SELECT e.id, e.duration FROM entries e ORDER BY e.id`;
+          assertEquals(
+            lengths.map((e) => e.duration),
+            [2, 1, 2],
+            JSON.stringify(lengths),
           );
           assertEquals(files[2].flag, "silent: loudness could not be measured");
           assertEquals(
@@ -519,7 +522,6 @@ Deno.test({
           r = await alex.post("/entries", {
             competitor_id: String(alexId),
             competition_id: String(comps[2].id),
-            duration: "60",
           });
           assertStringIncludes(redirected(r).err ?? "", "not open");
 

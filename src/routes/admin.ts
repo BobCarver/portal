@@ -62,13 +62,14 @@ import { dataOnlyZip } from "./api.ts";
 const TABS = [
   ["", "Overview"],
   ["structure", "Tracks and sessions"],
+  ["plan", "Plan"],
   ["rubrics", "Rubrics and judges"],
   ["entries", "Entries and audio"],
   ["export", "Export"],
   ["results", "Results"],
 ] as const;
 
-function tabs(fid: number, on: string): Html {
+export function tabs(fid: number, on: string): Html {
   return html`
     <nav class="tabs">${TABS.map(([path, label]) =>
       html`
@@ -80,7 +81,7 @@ function tabs(fid: number, on: string): Html {
   `;
 }
 
-function stateLine(s: FestivalState): Html {
+export function stateLine(s: FestivalState): Html {
   if (s.final) {
     return html`
       <p>
@@ -116,7 +117,7 @@ function stateLine(s: FestivalState): Html {
 }
 
 /** `datetime-local` input showing a UTC time in the browser's zone (page script). */
-const dateInput = (name: string, d: Date | null, required = false) =>
+export const dateInput = (name: string, d: Date | null, required = false) =>
   html`
     <input type="datetime-local" name="${name}" ${required
       ? "required"
@@ -204,7 +205,7 @@ function rulesFrom(f: Record<string, unknown>): CompetitionRules {
   };
 }
 
-const dateFrom = (f: Record<string, unknown>, name: string) =>
+export const dateFrom = (f: Record<string, unknown>, name: string) =>
   parseLocalDateTime(str(f, name), Number(str(f, "tz_offset") || 0));
 
 export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
@@ -1546,7 +1547,9 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
                     <summary>
                       <strong>${e.order_number}. ${e.competitor_name}</strong>
                       <span class="small muted">${e
-                        .competitor_type} · ${seconds(e.duration)}</span>
+                        .competitor_type} · ${e.duration > 0
+                        ? seconds(e.duration)
+                        : "no length yet"}</span>
                       · music ${statusPill(
                         music?.status ?? "missing",
                         music?.reason,

@@ -16,7 +16,7 @@ export interface FestivalRow {
 /**
  * What may change now (portal.md section 8):
  * - competitors enter while registration is open and before the freeze;
- * - competitors upload, replace, change duration and withdraw until the freeze;
+ * - competitors upload, replace and withdraw until the freeze;
  * - admins may change anything until the final export, after which nothing
  *   changes (the bundle is final).
  */

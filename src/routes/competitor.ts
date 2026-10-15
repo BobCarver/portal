@@ -18,7 +18,6 @@ import {
   enter,
   entryForUser,
   removeMember,
-  setDuration,
   updateCompetitor,
   withdraw,
 } from "../entries.ts";
@@ -30,7 +29,7 @@ import {
   rulesLabel,
 } from "../eligibility.ts";
 import { festivalState } from "../festival.ts";
-import { int, parseDuration, rangeResponse, str } from "../http.ts";
+import { int, rangeResponse, str } from "../http.ts";
 import {
   type Profile,
   profileComplete,
@@ -288,7 +287,7 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
                         <tr>
                           <th>Festival</th>
                           <th>Competition</th>
-                          <th>Duration</th>
+                          <th>Length</th>
                           <th>Music</th>
                           <th>Position</th>
                           <th></th>
@@ -298,7 +297,9 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
                             <tr>
                               <td>${e.festival_name}</td>
                               <td>${e.competition_name}</td>
-                              <td>${seconds(e.duration)}</td>
+                              <td>${e.duration > 0
+                                ? seconds(e.duration)
+                                : "–"}</td>
                               <td>${statusPill(e.music ?? "missing")}</td>
                               <td>${e.order_published ? e.order_number : html`
                                 <span class="muted">not published</span>
@@ -553,14 +554,9 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
                   </p>
                 `
                 : ""}
-              <label>Performance duration (seconds, or minutes:seconds)
-                <input
-                  type="text"
-                  name="duration"
-                  required
-                  placeholder="2:30"
-                  inputmode="numeric"
-                ></label>
+              <p class="small muted">
+                The entry's length is taken from the music you upload.
+              </p>
               <button>Enter</button>
             </form>
           `}
@@ -582,7 +578,6 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
     const id = await enter(ctx, user, {
       competitorId: int(f, "competitor_id"),
       competitionId: int(f, "competition_id"),
-      duration: parseDuration(str(f, "duration")),
     });
     return back(c, `/entries/${id}`, { ok: "Entered. Now upload your music." });
   });
@@ -625,22 +620,16 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
             : html`
               <span class="muted">published by the organiser before the event</span>
             `}</p>
-          ${canEdit
+          <p>Length: ${entry.duration > 0
             ? html`
-              <form class="row" method="post" action="/entries/${entry
-                .id}/duration">
-                <label>Duration (seconds or m:ss) <input
-                    type="text"
-                    name="duration"
-                    value="${seconds(entry.duration)}"
-                    required
-                  ></label>
-                <button class="small">Save</button>
-              </form>
+              ${seconds(
+                entry.duration,
+              )} <span class="small muted">(from the music)</span>
             `
             : html`
-              <p>Duration: ${seconds(entry.duration)}</p>
-            `} ${!canEdit
+              <span class="muted">set when the music is ready</span>
+            `}</p>
+          ${!canEdit
             ? html`
               <p class="small muted">${state.final
                 ? "The final bundle has been exported; nothing can change now."
@@ -696,18 +685,6 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
       processing: files.some((f) => f.status === "processing"),
       files,
     });
-  });
-
-  app.post("/entries/:id/duration", async (c) => {
-    const user = needUser(c);
-    const id = Number(c.req.param("id"));
-    await setDuration(
-      ctx,
-      user,
-      id,
-      parseDuration(str(await c.req.parseBody(), "duration")),
-    );
-    return back(c, `/entries/${id}`, { ok: "Duration saved." });
   });
 
   app.post("/entries/:id/withdraw", async (c) => {

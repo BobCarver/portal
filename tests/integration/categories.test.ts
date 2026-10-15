@@ -169,7 +169,6 @@ Deno.test({
         c.post("/entries", {
           competitor_id: String(competitorId),
           competition_id: String(competitionId),
-          duration: "90",
         });
 
       // --- refusals on entering ---------------------------------------------------

@@ -72,7 +72,7 @@
                         "sha256": "2af8bd6c986f784ddc4c761b7155cb7ca06acbb6087f30d515cd73148711cb50"
                       }
                     },
-                    "duration": 95,
+                    "duration": 3,
                     "id": 1,
                     "name": "Dana Lee",
                     "order_number": 1,
@@ -89,12 +89,12 @@
                   {
                     "audio": {
                       "music": {
-                        "bytes": 73370,
+                        "bytes": 121645,
                         "content_type": "audio/mpeg",
-                        "sha256": "352aee9e5b261fab5b5ea733b1cf1d254fcc6db18c8b992080e000d9a702a450"
+                        "sha256": "cc22a429b58b7e89d5ee9f1ee639607aa9a2677be41c763dbf1c4cea74b086b6"
                       }
                     },
-                    "duration": 150,
+                    "duration": 5,
                     "id": 2,
                     "name": "Dana and Sam",
                     "order_number": 1,
@@ -119,12 +119,12 @@
                   {
                     "audio": {
                       "music": {
-                        "bytes": 73370,
+                        "bytes": 97821,
                         "content_type": "audio/mpeg",
-                        "sha256": "a12a6b8f9cf79e7c285e4070429c3572289e40bbbca74909b8589a4f24ece3cf"
+                        "sha256": "dbac486a5efe46be06bb9bad8f1f05a6f44acd24d11aa63883dfd92305515289"
                       }
                     },
-                    "duration": 140,
+                    "duration": 4,
                     "id": 3,
                     "name": "Kim and Lou",
                     "order_number": 1,
@@ -141,12 +141,12 @@
                   {
                     "audio": {
                       "music": {
-                        "bytes": 73370,
+                        "bytes": 145468,
                         "content_type": "audio/mpeg",
-                        "sha256": "daedf3b2e217e4df4a2632f0437c55c2792fc55cb0f7c2ff6bdfdf7f83c0a81d"
+                        "sha256": "5e224a13a58f9ed7f10df5e3e44b811ae8cf603904b15aee23b4807a14ea67ef"
                       }
                     },
-                    "duration": 180,
+                    "duration": 6,
                     "id": 4,
                     "name": "The Night Owls",
                     "order_number": 1,

@@ -97,7 +97,6 @@ Deno.test({
       r = await dancer.post("/entries", {
         competitor_id: String(competitorId),
         competition_id: String(comp.id),
-        duration: "60",
       });
       const entryId = Number(redirected(r).path.split("/").pop());
       assertStringIncludes(

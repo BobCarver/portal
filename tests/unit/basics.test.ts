@@ -1,11 +1,7 @@
 import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import { sniffAudio } from "../../src/audio/sniff.ts";
 import { hashPassword, verifyPassword } from "../../src/crypto.ts";
-import {
-  parseDuration,
-  parseLocalDateTime,
-  parseRange,
-} from "../../src/http.ts";
+import { parseLocalDateTime, parseRange } from "../../src/http.ts";
 import { moveBy, moveTo } from "../../src/order.ts";
 import { html, raw } from "../../src/views/html.ts";
 
@@ -78,14 +74,6 @@ Deno.test("range header", () => {
   assertEquals(parseRange("bytes=50-500", 100), { start: 50, end: 99 });
   assertEquals(parseRange("bytes=100-", 100), "bad");
   assertEquals(parseRange("bytes=0-1,5-6", 100), null);
-});
-
-Deno.test("duration: seconds or minutes:seconds", () => {
-  assertEquals(parseDuration("95"), 95);
-  assertEquals(parseDuration("1:35"), 95);
-  assertEquals(parseDuration("2m 5s"), 125);
-  assertThrows(() => parseDuration("1:75"));
-  assertThrows(() => parseDuration("soon"));
 });
 
 Deno.test("local date-time input with the browser's offset", () => {

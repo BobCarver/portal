@@ -102,21 +102,6 @@ export function required(
   return v.slice(0, 200);
 }
 
-/** Seconds, from "95", "1:35" or "1m35s". */
-export function parseDuration(text: string): number {
-  const t = text.trim();
-  let m = /^(\d+)$/.exec(t);
-  if (m) return Number(m[1]);
-  m = /^(\d+):([0-5]?\d)$/.exec(t);
-  if (m) return Number(m[1]) * 60 + Number(m[2]);
-  m = /^(?:(\d+)\s*m)?\s*(?:(\d+)\s*s)?$/i.exec(t);
-  if (m && (m[1] || m[2])) return Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0);
-  throw new UserError(
-    "Enter the duration as seconds (95) or minutes:seconds (1:35).",
-    422,
-  );
-}
-
 /**
  * A `datetime-local` value typed in the browser's time zone. `offsetMinutes`
  * is the browser's `getTimezoneOffset()` (0 without script: UTC).
