@@ -80,6 +80,11 @@ Deno.test({
         email: "d@example.com",
         password: "a long enough password",
       });
+      await dancer.post("/profile", {
+        gender: "female",
+        date_of_birth: "1990-05-01",
+        level: "amateur",
+      });
       r = await dancer.post("/competitors", {
         name: "Dee",
         type: "individual",
@@ -87,7 +92,7 @@ Deno.test({
       const competitorId = Number(redirected(r).path.split("/").pop());
       assertStringIncludes(
         await (await dancer.get(`/festivals/${fid}/enter`)).text(),
-        "Hip hop solo · not scheduled yet",
+        "Hip hop solo · Open · not scheduled yet",
       );
       r = await dancer.post("/entries", {
         competitor_id: String(competitorId),

@@ -22,9 +22,21 @@ import {
   updateCompetitor,
   withdraw,
 } from "../entries.ts";
+import { checkerFor } from "../categories.ts";
 import { UserError } from "../errors.ts";
+import {
+  type CompetitionGender,
+  type CompetitionLevel,
+  rulesLabel,
+} from "../eligibility.ts";
 import { festivalState } from "../festival.ts";
 import { int, parseDuration, rangeResponse, str } from "../http.ts";
+import {
+  type Profile,
+  profileComplete,
+  profileOf,
+  updateProfile,
+} from "../profile.ts";
 import { type Html, html } from "../views/html.ts";
 import {
   megabytes,
@@ -106,13 +118,90 @@ export function audioBlock(
   `;
 }
 
+/** Shown while a person's profile is incomplete: they cannot enter until it is done. */
+const profileNotice = (p: Profile) =>
+  profileComplete(p) ? "" : html`
+    <p class="flash err">
+      Complete <a href="/profile">your profile</a> (gender, date of birth, amateur
+      or professional): you cannot enter until it is done.
+    </p>
+  `;
+
 export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
   const maxMb = ctx.config.maxUploadBytes / 1024 / 1024;
 
   // --- dashboard -----------------------------------------------------------------
 
+  // --- profile (gender, date of birth, level) -------------------------------------
+
+  app.get("/profile", async (c) => {
+    const user = needUser(c);
+    const p = await profileOf(ctx, user.id);
+    return page(
+      c,
+      "Your profile",
+      html`
+        <h1>Your profile</h1>
+        <p class="small muted">
+          Competitions take men, women, mixed or same-gender couples, and an age band
+          and a level. These details decide which competitions you can enter. They are
+          never shared outside the organisers.
+        </p>
+        <form
+          class="card stack"
+          method="post"
+          action="/profile"
+          style="max-width:420px"
+        >
+          <label>Gender
+            <select name="gender" required>
+              <option value="">Choose</option>
+              <option value="female" ${p.gender === "female"
+                ? "selected"
+                : ""}>Female</option>
+              <option value="male" ${p.gender === "male"
+                ? "selected"
+                : ""}>Male</option>
+            </select>
+          </label>
+          <label>Date of birth
+            <input type="date" name="date_of_birth" required value="${p
+              .date_of_birth ?? ""}">
+          </label>
+          <label>Level
+            <select name="level" required>
+              <option value="">Choose</option>
+              <option value="amateur" ${p.level === "amateur"
+                ? "selected"
+                : ""}>Amateur</option>
+              <option value="professional" ${p.level === "professional"
+                ? "selected"
+                : ""}>Professional</option>
+            </select>
+          </label>
+          <button>Save profile</button>
+        </form>
+        <p class="small muted">
+          Changing these after you have entered a competition re-checks every entry.
+        </p>
+      `,
+    );
+  });
+
+  app.post("/profile", async (c) => {
+    const user = needUser(c);
+    const f = await c.req.parseBody();
+    await updateProfile(ctx, user, {
+      gender: str(f, "gender"),
+      date_of_birth: str(f, "date_of_birth"),
+      level: str(f, "level"),
+    });
+    return back(c, "/me", { ok: "Profile saved." });
+  });
+
   app.get("/me", async (c) => {
     const user = needUser(c);
+    const myProfile = await profileOf(ctx, user.id);
     const competitors = await ctx.sql<
       { id: number; name: string; type: string }[]
     >`
@@ -151,7 +240,7 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
       "My entries",
       html`
         <h1>My entries</h1>
-        ${festivals.length
+        ${profileNotice(myProfile)} ${festivals.length
           ? html`
             <div class="card">
               <h2 style="margin-top:0">Open for registration</h2>
@@ -386,25 +475,40 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
     const competitors = await ctx.sql<{ id: number; name: string }[]>`
       SELECT p.id, p.name FROM competitors p JOIN competitor_members m ON m.competitor_id = p.id
       WHERE m.user_id = ${user.id} ORDER BY p.name`;
-    const competitions = await ctx.sql<{
+    const all = await ctx.sql<{
       id: number;
       name: string;
       session_name: string | null;
       track_name: string | null;
       location: string | null;
+      gender: CompetitionGender;
+      level: CompetitionLevel;
+      min_age: number | null;
+      max_age: number | null;
     }[]>`
-      SELECT c.id, c.name, s.name AS session_name, t.name AS track_name, t.location
+      SELECT c.id, c.name, s.name AS session_name, t.name AS track_name, t.location,
+        c.gender, c.level, c.min_age, c.max_age
       FROM competitions c LEFT JOIN sessions s ON s.id = c.session_id
         LEFT JOIN tracks t ON t.id = s.track_id
       WHERE c.festival_id = ${fid} AND c.open
       ORDER BY s.start_time NULLS LAST, t.id, s.order_number, c.order_number, c.name`;
-    const chosen = Number(c.req.query("competitor")) || competitors[0]?.id;
+    // Only the user's own competitors can be chosen; their members are loaded once.
+    const chosen = competitors.find((p) =>
+      p.id === Number(c.req.query("competitor"))
+    )?.id ??
+      competitors[0]?.id;
+    const check = chosen ? await checkerFor(ctx.sql, chosen) : null;
+    const competitions = all.filter((x) =>
+      check?.(x, state.festival.age_on).length === 0
+    );
+    const hidden = all.length - competitions.length;
+    const profile = await profileOf(ctx, user.id);
     return page(
       c,
       `Enter ${state.festival.name}`,
       html`
         <h1>Enter ${state.festival.name}</h1>
-        ${competitors.length === 0
+        ${profileNotice(profile)} ${competitors.length === 0
           ? html`
             <p>First <a href="/competitors/new">create a competitor</a>.</p>
           `
@@ -428,7 +532,7 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
                   ${competitions.map((x) =>
                     html`
                       <option value="${x.id}">
-                        ${x.name}${x.session_name
+                        ${x.name} · ${rulesLabel(x)}${x.session_name
                           ? ` · ${x.session_name}, ${x.track_name}${
                             x.location ? ` (${x.location})` : ""
                           }`
@@ -437,6 +541,18 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
                     `
                   )}
                 </select></label>
+              ${competitions.length === 0
+                ? html`
+                  <p class="small muted">There is nothing this competitor can enter right now.</p>
+                `
+                : ""} ${hidden > 0
+                ? html`
+                  <p class="small muted">
+                    ${hidden} competition(s) are not shown: this competitor's gender, age or
+                    level does not match.
+                  </p>
+                `
+                : ""}
               <label>Performance duration (seconds, or minutes:seconds)
                 <input
                   type="text"
@@ -448,6 +564,13 @@ export function competitorRoutes(app: Hono<AppEnv>, ctx: AppContext) {
               <button>Enter</button>
             </form>
           `}
+        <script type="module">
+        // The offered competitions depend on the competitor: reload for the new one.
+        const select = document.querySelector("select[name=competitor_id]");
+        select?.addEventListener("change", () => {
+          location.search = "?competitor=" + select.value;
+        });
+        </script>
         <p><a href="/me">Back to my entries</a></p>
       `,
     );

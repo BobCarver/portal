@@ -43,6 +43,37 @@ Design rules that follow from this:
 Authentication is the portal's own (email + password or magic link, with password
 reset). It is unrelated to the competition server's admin-issued device links.
 
+## 2a. Categories and eligibility
+
+Every competition takes a category. The portal checks each entry against it; the
+competition server does not need the categories, so nothing about them is in the
+festival bundle.
+
+- **Person** (a user account): `gender` (male or female), `date_of_birth`, and
+  `level` (amateur or professional). A person cannot enter until all three are set.
+  They are private: only the person and the organisers see them, and they are never
+  exported.
+- **Competition**: `gender` (`male`, `female`, `mixed`, `same_gender` or `open`),
+  `level` (`amateur`, `professional`, `pro_am` or `open`), and an optional age band
+  (`min_age`, `max_age`, both inclusive). The festival's `age_on` date is the day
+  ages are worked out on; a band needs it.
+- **Competitor category** follows its members. A soloist is male or female. A couple
+  is `same_gender` if both partners share a gender, otherwise `mixed`. A team is
+  `male` or `female` if every member is, otherwise `mixed`.
+- **Entry rules:** the category must match the competition's gender (or the
+  competition is `open`); `mixed` and `same_gender` are for couples only. Every
+  member must be within the age band on `age_on`. An amateur or professional
+  competition takes only members of that level. A `pro_am` competition needs at
+  least one professional and one amateur. A couple has exactly two members; a
+  soloist has one.
+- **Names are for people.** Competition names may say "Women · Amateur · …"; the
+  rules are the fields above, and they are what is checked.
+
+The rules are checked whenever they could change the answer: when entering, when
+members are added or removed, when a person's profile changes, when a competition's
+rules or the festival's age date change, and again at export. A change that would
+break an entry is refused, and nothing is saved.
+
 ## 3. Functional requirements
 
 ### Competitor

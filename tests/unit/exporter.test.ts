@@ -24,7 +24,7 @@ function snapshot(): Snapshot {
     true_peak_db: -1.2,
   });
   return {
-    festival: { id: 1, name: "Autumn Open" },
+    festival: { id: 1, name: "Autumn Open", age_on: null },
     tracks: [{ id: 1, name: "Main floor", location: "Hall A" }],
     sessions: [{
       id: 10,
@@ -40,6 +40,10 @@ function snapshot(): Snapshot {
         name: "Latin solo",
         order_number: 1,
         rubric_id: 1,
+        gender: "open",
+        level: "open",
+        min_age: null,
+        max_age: null,
       },
       {
         id: 101,
@@ -47,8 +51,46 @@ function snapshot(): Snapshot {
         name: "Latin couples",
         order_number: 2,
         rubric_id: 1,
+        gender: "open",
+        level: "open",
+        min_age: null,
+        max_age: null,
       },
-      { id: 102, session_id: 10, name: "Empty", order_number: 3, rubric_id: 2 },
+      {
+        id: 102,
+        session_id: 10,
+        name: "Empty",
+        order_number: 3,
+        rubric_id: 2,
+        gender: "open",
+        level: "open",
+        min_age: null,
+        max_age: null,
+      },
+    ],
+    // Profiles of the people in the entries: a couple (1002) has two members.
+    members: [
+      {
+        competitor_id: 1001,
+        name: "Alex Rivera",
+        gender: "male",
+        date_of_birth: "1990-05-01",
+        level: "amateur",
+      },
+      {
+        competitor_id: 1002,
+        name: "Sam",
+        gender: "female",
+        date_of_birth: "1992-01-01",
+        level: "amateur",
+      },
+      {
+        competitor_id: 1002,
+        name: "Kim",
+        gender: "female",
+        date_of_birth: "1994-02-02",
+        level: "amateur",
+      },
     ],
     rubrics: [{ id: 1, name: "Standard" }, { id: 2, name: "Unused" }],
     criteria: [
@@ -347,8 +389,61 @@ Deno.test("export: an unscheduled competition without entries is simply left out
     name: "Hip hop solo",
     order_number: null,
     rubric_id: 1,
+    gender: "open",
+    level: "open",
+    min_age: null,
+    max_age: null,
   });
   const { errors, data } = buildBundle(s);
   assertEquals(errors, []);
   assert(!canonicalData(data).includes("Hip hop"));
+});
+
+Deno.test("eligibility: a bundle is refused when an entry breaks its competition's rules", () => {
+  const s = snapshot();
+  // The solo is in a women's competition, but its entrant is a man.
+  s.competitions[0].gender = "female";
+  const { errors } = buildBundle(s);
+  assert(
+    errors.some((e) =>
+      e.includes("Alex Rivera in Latin solo is not eligible") &&
+      e.includes("this competition is women, and the entry is men")
+    ),
+    errors.join("\n"),
+  );
+});
+
+Deno.test("eligibility: a missing profile refuses the export, and no date of birth is ever shown", () => {
+  const s = snapshot();
+  s.competitions[0].min_age = 18;
+  s.members[0].date_of_birth = null;
+  const { errors } = buildBundle(s);
+  assert(errors.some((e) => e.includes("has not set")), errors.join("\n"));
+  assert(!errors.join("\n").match(/\d{4}-\d{2}-\d{2}/), errors.join("\n"));
+});
+
+Deno.test("eligibility: categories never reach data.json", () => {
+  const s = snapshot();
+  s.competitions[0].min_age = 18;
+  s.competitions[0].max_age = 40;
+  s.festival.age_on = "2026-10-20";
+  const { data, errors } = buildBundle(s);
+  assertEquals(errors, []);
+  const text = canonicalData(data);
+  for (
+    const word of [
+      "1990-05-01",
+      "1992-01-01",
+      "1994-02-02",
+      "date_of_birth",
+      "gender",
+      "min_age",
+      "max_age",
+      "amateur",
+      "male",
+      "female",
+    ]
+  ) {
+    assert(!text.includes(word), `data.json mentions ${word}`);
+  }
 });

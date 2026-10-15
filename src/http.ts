@@ -131,3 +131,18 @@ export function parseLocalDateTime(value: string, offsetMinutes: number): Date {
     utc + (Number.isFinite(offsetMinutes) ? offsetMinutes : 0) * 60_000,
   );
 }
+
+/** A calendar-valid `YYYY-MM-DD` (rejects 2026-02-31), or a `UserError` naming `what`. */
+export function parseIsoDate(text: string, what = "date"): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text.trim());
+  if (!m) throw new UserError(`Enter the ${what} as YYYY-MM-DD.`, 422);
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (
+    date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 ||
+    date.getUTCDate() !== d
+  ) {
+    throw new UserError(`That ${what} is not a real date.`, 422);
+  }
+  return text.trim();
+}

@@ -27,20 +27,13 @@
       "lufs": -15,
       "sha256": "daedf3b2e217e4df4a2632f0437c55c2792fc55cb0f7c2ff6bdfdf7f83c0a81d",
       "true_peak_db": -11.3
-    },
-    {
-      "bytes": 73370,
-      "content_type": "audio/mpeg",
-      "lufs": -15,
-      "sha256": "f33b9cbc261410a7cba1f19efcabbbe0155073343a8eed039e6640e2529569f7",
-      "true_peak_db": -11.3
     }
   ],
   "bundle_version": 1,
-  "data_sha256": "b46577893551c0b6bc91ace86b29ad761adb6a86c30560bc04c9c7fb221081fd",
-  "digest": "b1c262b992006bab7fac2f6dcba5d60fb0b11870da494e858058e98fd2d17df0",
+  "data_sha256": "ac946f1c8320302ed28ec2ae69ae12c458d4f030d861dae9e0afe685f508acc4",
+  "digest": "a18b4bed7e14ab7111befeefad3e7c425d0e17c93eda74c05658bc2c7c6a6d62",
   "festival_id": 1,
-  "generated_at": "2026-10-13T22:20:33Z",
+  "generated_at": "2026-10-15T04:01:27Z",
   "loudness_target_lufs": -15,
   "problems": []
 }

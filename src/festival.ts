@@ -9,6 +9,8 @@ export interface FestivalRow {
   order_published: boolean;
   api_token_hash: string | null;
   created_at: Date;
+  /** The date ages are worked out on (ISO), or null. */
+  age_on: string | null;
 }
 
 /**
@@ -34,7 +36,9 @@ export async function festivalState(
   now = new Date(),
 ): Promise<FestivalState> {
   const [f] = await sql<(FestivalRow & { final: boolean })[]>`
-    SELECT f.*, EXISTS (SELECT 1 FROM exports x WHERE x.festival_id = f.id AND x.final) AS final
+    SELECT f.id, f.name, f.registration_open, f.freeze_at, f.order_published,
+      f.api_token_hash, f.created_at, to_char(f.age_on, 'YYYY-MM-DD') AS age_on,
+      EXISTS (SELECT 1 FROM exports x WHERE x.festival_id = f.id AND x.final) AS final
     FROM festivals f WHERE f.id = ${festivalId}`;
   if (!f) throw new UserError("No such festival.", 404);
   const { final, ...festival } = f;

@@ -26,6 +26,11 @@ import { logEvent } from "../db.ts";
 import { UserError } from "../errors.ts";
 import { festivalState, utcIso } from "../festival.ts";
 import { writeStoredZip } from "./zip.ts";
+import {
+  type CompetitionRules,
+  eligibility,
+  type Member,
+} from "../eligibility.ts";
 
 /**
  * The exporter (portal.md section 7): one consistent snapshot, a nested tree
@@ -37,7 +42,8 @@ import { writeStoredZip } from "./zip.ts";
 
 /** Exactly the columns the exporter may use. Nothing private is read. */
 export interface Snapshot {
-  festival: { id: number; name: string };
+  /** `age_on`: the date category ages are worked out on (ISO), or null. */
+  festival: { id: number; name: string; age_on: string | null };
   tracks: { id: number; name: string; location: string }[];
   sessions: {
     id: number;
@@ -47,14 +53,19 @@ export interface Snapshot {
     order_number: number;
   }[];
   /** Every competition of the festival, scheduled or not (session_id null). */
-  competitions: {
+  competitions: (CompetitionRules & {
     id: number;
     session_id: number | null;
     name: string;
     /** Set exactly when session_id is. */
     order_number: number | null;
     rubric_id: number;
-  }[];
+  })[];
+  /**
+   * The profiles of the members of every entered competitor: used only to check
+   * that entries are still legal. Never copied into the bundle.
+   */
+  members: (Member & { competitor_id: number })[];
   rubrics: { id: number; name: string }[];
   criteria: { id: number; rubric_id: number; name: string; weight: number }[];
   judges: { id: number; name: string }[];
@@ -91,7 +102,8 @@ export function readSnapshot(
     "isolation level repeatable read read only",
     async (tx) => {
       const [festival] = await tx<Snapshot["festival"][]>`
-      SELECT id, name FROM festivals WHERE id = ${festivalId}`;
+      SELECT id, name, to_char(age_on, 'YYYY-MM-DD') AS age_on
+      FROM festivals WHERE id = ${festivalId}`;
       if (!festival) throw new UserError("No such festival.", 404);
       return {
         festival,
@@ -102,8 +114,17 @@ export function readSnapshot(
         FROM sessions s JOIN tracks t ON t.id = s.track_id
         WHERE t.festival_id = ${festivalId}`,
         competitions: await tx`
-        SELECT id, session_id, name, order_number, rubric_id
+        SELECT id, session_id, name, order_number, rubric_id,
+          gender, level, min_age, max_age
         FROM competitions WHERE festival_id = ${festivalId}`,
+        members: await tx`
+        SELECT DISTINCT e.competitor_id, u.name, u.gender,
+          u.date_of_birth::text AS date_of_birth, u.level
+        FROM entries e
+          JOIN competitions c ON c.id = e.competition_id
+          JOIN competitor_members m ON m.competitor_id = e.competitor_id
+          JOIN users u ON u.id = m.user_id
+        WHERE c.festival_id = ${festivalId}`,
         rubrics:
           await tx`SELECT id, name FROM rubrics WHERE festival_id = ${festivalId}`,
         criteria: await tx`SELECT c.id, c.rubric_id, c.name, c.weight
@@ -138,6 +159,46 @@ export interface AudioSource {
   storage_key: string;
   lufs: number | null;
   true_peak_db: number | null;
+}
+
+/**
+ * Every entry must still meet its competition's rules. Entries are checked
+ * here as well as when they are made, so a bundle can never carry an illegal
+ * entry. Messages name people but never show a date of birth.
+ */
+function eligibilityErrors(
+  snap: Snapshot,
+  entriesBy: Map<number, Snapshot["entries"]>,
+): string[] {
+  const errors: string[] = [];
+  const membersOf = new Map<number, Snapshot["members"]>();
+  for (const m of snap.members) {
+    membersOf.set(m.competitor_id, [
+      ...(membersOf.get(m.competitor_id) ?? []),
+      m,
+    ]);
+  }
+  const type = new Map(
+    snap.entries.map((e) => [e.competitor_id, e.competitor_type]),
+  );
+  for (const c of snap.competitions) {
+    for (const e of entriesBy.get(c.id) ?? []) {
+      const problems = eligibility({
+        type: type.get(e.competitor_id) ?? "individual",
+        members: membersOf.get(e.competitor_id) ?? [],
+        competition: c,
+        ageOn: snap.festival.age_on,
+      });
+      if (problems.length) {
+        errors.push(
+          `${e.competitor_name} in ${c.name} is not eligible: ${
+            problems.join("; ")
+          }`,
+        );
+      }
+    }
+  }
+  return errors;
 }
 
 export interface Built {
@@ -285,6 +346,7 @@ export function buildBundle(snap: Snapshot): Built {
     },
   };
   const errors = validateData(data);
+  errors.push(...eligibilityErrors(snap, entriesBy));
   for (const c of snap.competitions) {
     const entries = (entriesBy.get(c.id) ?? []).length;
     if (entries > 0 && c.session_id === null) {

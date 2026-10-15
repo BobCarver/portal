@@ -72,29 +72,15 @@
                         "sha256": "2af8bd6c986f784ddc4c761b7155cb7ca06acbb6087f30d515cd73148711cb50"
                       }
                     },
-                    "duration": 130,
+                    "duration": 95,
                     "id": 1,
-                    "name": "Alex Rivera",
+                    "name": "Dana Lee",
                     "order_number": 1,
-                    "type": "individual"
-                  },
-                  {
-                    "audio": {
-                      "music": {
-                        "bytes": 73370,
-                        "content_type": "audio/mpeg",
-                        "sha256": "352aee9e5b261fab5b5ea733b1cf1d254fcc6db18c8b992080e000d9a702a450"
-                      }
-                    },
-                    "duration": 125,
-                    "id": 2,
-                    "name": "Jo Park",
-                    "order_number": 2,
                     "type": "individual"
                   }
                 ],
                 "id": 1,
-                "name": "Latin solo",
+                "name": "Women · Amateur · Latin solo",
                 "order_number": 1,
                 "rubric_id": 1
               },
@@ -105,32 +91,18 @@
                       "music": {
                         "bytes": 73370,
                         "content_type": "audio/mpeg",
-                        "sha256": "a12a6b8f9cf79e7c285e4070429c3572289e40bbbca74909b8589a4f24ece3cf"
+                        "sha256": "352aee9e5b261fab5b5ea733b1cf1d254fcc6db18c8b992080e000d9a702a450"
                       }
                     },
-                    "duration": 120,
-                    "id": 3,
-                    "name": "Sam and Kim",
+                    "duration": 150,
+                    "id": 2,
+                    "name": "Dana and Sam",
                     "order_number": 1,
-                    "type": "couple"
-                  },
-                  {
-                    "audio": {
-                      "music": {
-                        "bytes": 73370,
-                        "content_type": "audio/mpeg",
-                        "sha256": "daedf3b2e217e4df4a2632f0437c55c2792fc55cb0f7c2ff6bdfdf7f83c0a81d"
-                      }
-                    },
-                    "duration": 115,
-                    "id": 4,
-                    "name": "Lee and Max",
-                    "order_number": 2,
                     "type": "couple"
                   }
                 ],
                 "id": 2,
-                "name": "Latin couples",
+                "name": "Mixed couples · Pro-am · Latin couples",
                 "order_number": 2,
                 "rubric_id": 1
               }
@@ -149,19 +121,41 @@
                       "music": {
                         "bytes": 73370,
                         "content_type": "audio/mpeg",
-                        "sha256": "f33b9cbc261410a7cba1f19efcabbbe0155073343a8eed039e6640e2529569f7"
+                        "sha256": "a12a6b8f9cf79e7c285e4070429c3572289e40bbbca74909b8589a4f24ece3cf"
                       }
                     },
-                    "duration": 110,
-                    "id": 5,
+                    "duration": 140,
+                    "id": 3,
+                    "name": "Kim and Lou",
+                    "order_number": 1,
+                    "type": "couple"
+                  }
+                ],
+                "id": 3,
+                "name": "Same-gender couples · Amateur · Latin couples",
+                "order_number": 1,
+                "rubric_id": 1
+              },
+              {
+                "competitors": [
+                  {
+                    "audio": {
+                      "music": {
+                        "bytes": 73370,
+                        "content_type": "audio/mpeg",
+                        "sha256": "daedf3b2e217e4df4a2632f0437c55c2792fc55cb0f7c2ff6bdfdf7f83c0a81d"
+                      }
+                    },
+                    "duration": 180,
+                    "id": 4,
                     "name": "The Night Owls",
                     "order_number": 1,
                     "type": "team"
                   }
                 ],
-                "id": 3,
-                "name": "Showcase teams",
-                "order_number": 1,
+                "id": 4,
+                "name": "Open · Pro-am · Showcase teams",
+                "order_number": 2,
                 "rubric_id": 1
               }
             ],

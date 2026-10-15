@@ -35,6 +35,7 @@ async function signUp(
   client: Client,
   email: string,
   name = email.split("@")[0],
+  level: "amateur" | "professional" = "amateur",
 ) {
   const res = await client.post("/register", {
     name,
@@ -43,6 +44,13 @@ async function signUp(
   });
   assertEquals(res.status, 303, await res.text());
   assert(client.cookies.size > 0, "signed in");
+  // Every person needs a profile before they can enter (portal.md, categories).
+  const profile = await client.post("/profile", {
+    gender: "female",
+    date_of_birth: "1990-05-01",
+    level,
+  });
+  assertEquals(redirected(profile).ok, "Profile saved.");
 }
 
 const idFrom = (path: string) => Number(path.split("/").pop());
@@ -199,7 +207,7 @@ Deno.test({
       });
 
       const sam = new Client(ctx);
-      await signUp(sam, "sam@example.com", "Sam");
+      await signUp(sam, "sam@example.com", "Sam", "professional");
       await signUp(new Client(ctx), "kim@example.com", "Kim");
       r = await sam.post("/competitors", {
         name: "Sam and Kim",

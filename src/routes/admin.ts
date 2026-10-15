@@ -6,6 +6,17 @@ import { type AppContext, nowOf } from "../context.ts";
 import { randomToken, sha256Hex } from "../crypto.ts";
 import { logEvent, type Tx } from "../db.ts";
 import { UserError } from "../errors.ts";
+import { assertEntriesEligible } from "../categories.ts";
+import {
+  COMPETITION_GENDERS,
+  COMPETITION_LEVELS,
+  type CompetitionGender,
+  type CompetitionLevel,
+  type CompetitionRules,
+  GENDER_LABEL,
+  LEVEL_LABEL,
+  rulesLabel,
+} from "../eligibility.ts";
 import {
   buildBundle,
   exportFestival,
@@ -22,6 +33,7 @@ import {
 import {
   fileResponse,
   int,
+  parseIsoDate,
   parseLocalDateTime,
   required,
   str,
@@ -115,6 +127,82 @@ const dateInput = (name: string, d: Date | null, required = false) =>
       : ""}>
     <input type="hidden" name="tz_offset" value="0">
   `;
+
+/** The category fields of a competition form (gender, level, age band). */
+function rulesFields(k?: Partial<CompetitionRules>): Html {
+  const gender = k?.gender ?? "open";
+  const level = k?.level ?? "open";
+  return html`
+    <span class="row" style="gap:6px">
+      <select name="gender" title="Gender">${COMPETITION_GENDERS.map((v) =>
+        html`
+          <option value="${v}" ${v === gender
+            ? "selected"
+            : ""}>${GENDER_LABEL[v]}</option>
+        `
+      )}</select>
+      <select name="level" title="Level">${COMPETITION_LEVELS.map((v) =>
+        html`
+          <option value="${v}" ${v === level
+            ? "selected"
+            : ""}>${LEVEL_LABEL[v]}</option>
+        `
+      )}</select>
+      <input
+        type="number"
+        name="min_age"
+        min="0"
+        max="120"
+        placeholder="min age"
+        title="Youngest age (on the festival's age date)"
+        value="${k?.min_age ?? ""}"
+        style="width:84px"
+      >
+      <input
+        type="number"
+        name="max_age"
+        min="0"
+        max="120"
+        placeholder="max age"
+        title="Oldest age"
+        value="${k?.max_age ?? ""}"
+        style="width:84px"
+      >
+    </span>
+  `;
+}
+
+/** The category fields from a competition form, checked. */
+function rulesFrom(f: Record<string, unknown>): CompetitionRules {
+  const gender = str(f, "gender") || "open";
+  const level = str(f, "level") || "open";
+  if (!COMPETITION_GENDERS.includes(gender as CompetitionGender)) {
+    throw new UserError("Choose a gender category.", 422);
+  }
+  if (!COMPETITION_LEVELS.includes(level as CompetitionLevel)) {
+    throw new UserError("Choose a level.", 422);
+  }
+  const age = (name: string): number | null => {
+    const v = str(f, name);
+    if (!v) return null;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 0 || n > 120) {
+      throw new UserError("Ages are whole numbers from 0 to 120.", 422);
+    }
+    return n;
+  };
+  const min_age = age("min_age");
+  const max_age = age("max_age");
+  if (min_age !== null && max_age !== null && min_age > max_age) {
+    throw new UserError("The youngest age is more than the oldest.", 422);
+  }
+  return {
+    gender: gender as CompetitionGender,
+    level: level as CompetitionLevel,
+    min_age,
+    max_age,
+  };
+}
 
 const dateFrom = (f: Record<string, unknown>, name: string) =>
   parseLocalDateTime(str(f, name), Number(str(f, "tz_offset") || 0));
@@ -258,6 +346,10 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
                 Registration open (competitors can enter open competitions)</label>
               <label>Freeze time: registration and competitor uploads close
                 ${dateInput("freeze_at", f.freeze_at)}</label>
+              <label>Age date: ages in competitions with an age band are worked out on this
+                day (usually the festival's first day)
+                <input type="date" name="age_on" value="${f.age_on ??
+                  ""}"></label>
               <label><input type="checkbox" name="order_published" value="1" ${f
                   .order_published
                 ? "checked"
@@ -334,9 +426,20 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
     await editable(fid);
     const f = await form(c);
     const freeze = str(f, "freeze_at") ? dateFrom(f, "freeze_at") : null;
-    await ctx.sql`UPDATE festivals SET name = ${required(f, "name", "a name")},
-      registration_open = ${f.registration_open === "1"}, freeze_at = ${freeze},
-      order_published = ${f.order_published === "1"} WHERE id = ${fid}`;
+    const ageOn = str(f, "age_on")
+      ? parseIsoDate(str(f, "age_on"), "age date")
+      : null;
+    await ctx.sql.begin(async (tx) => {
+      await tx`SELECT id FROM festivals WHERE id = ${fid} FOR UPDATE`;
+      await tx`UPDATE festivals SET name = ${required(f, "name", "a name")},
+        registration_open = ${
+        f.registration_open === "1"
+      }, freeze_at = ${freeze},
+        order_published = ${f.order_published === "1"},
+        age_on = ${ageOn}::date WHERE id = ${fid}`;
+      // A new age date can move someone out of a band: refuse it if so.
+      await assertEntriesEligible(tx, { festivalId: fid }, "That age date");
+    });
     await logEvent(ctx.sql, {
       festivalId: fid,
       userId: user.id,
@@ -411,8 +514,13 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
       open: boolean;
       order_number: number | null;
       entries: number;
+      gender: CompetitionGender;
+      level: CompetitionLevel;
+      min_age: number | null;
+      max_age: number | null;
     }[]>`
       SELECT c.id, c.session_id, c.name, c.rubric_id, c.open, c.order_number,
+        c.gender, c.level, c.min_age, c.max_age,
         (SELECT count(*)::int FROM entries e WHERE e.competition_id = c.id) AS entries
       FROM competitions c WHERE c.festival_id = ${fid}
       ORDER BY c.order_number, c.created_at, c.id`;
@@ -467,7 +575,7 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
                 ${edit
                   ? html`<td colspan="3"><form class="row" method="post" action="/admin/competitions/${k.id}" style="margin:0">
                       <input type="text" name="name" value="${k.name}" required>
-                      ${rubricSelect(k.rubric_id)} ${sessionSelect(null)}
+                      ${rubricSelect(k.rubric_id)} ${rulesFields(k)} ${sessionSelect(null)}
                       <label style="flex-direction:row;align-items:center"><input type="checkbox" name="open" value="1" ${k.open ? "checked" : ""}> open</label>
                       <button class="small secondary">Save</button></form></td>`
                   : html`<td colspan="3">${k.name}</td>`}
@@ -482,6 +590,7 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
               <input type="hidden" name="festival_id" value="${fid}">
               <label>New competition <input type="text" name="name" required></label>
               <label>Rubric ${rubricSelect()}</label>
+              ${rulesFields()}
               <label>Session ${sessionSelect(null)}</label>
               <button class="small">Add competition</button></form>`
           : ""}
@@ -604,7 +713,9 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
                                             .name}" required>
                                           ${rubricSelect(
                                             k.rubric_id,
-                                          )} ${sessionSelect(k.session_id)}
+                                          )} ${rulesFields(k)} ${sessionSelect(
+                                            k.session_id,
+                                          )}
                                           <label style="flex-direction:row;align-items:center"><input
                                               type="checkbox"
                                               name="open"
@@ -658,6 +769,7 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
                               .id}">
                             <label>New competition <input type="text" name="name" required></label>
                             <label>Rubric ${rubricSelect()}</label>
+                            ${rulesFields()}
                             <button class="small">Add competition</button>
                           </form>
                         `
@@ -799,6 +911,23 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
     return back(c, `/admin/f/${fid}/structure`, { ok: "Session deleted." });
   });
 
+  /** An age band is worked out on the festival's age date, so it must be set. */
+  const requireAgeDate = async (
+    tx: Tx,
+    fid: number,
+    rules: CompetitionRules,
+  ) => {
+    if (rules.min_age === null && rules.max_age === null) return;
+    const [f] = await tx<{ age_on: string | null }[]>`
+      SELECT to_char(age_on, 'YYYY-MM-DD') AS age_on FROM festivals WHERE id = ${fid}`;
+    if (!f.age_on) {
+      throw new UserError(
+        "Set the festival's age date (Overview, Settings) before giving a competition an age band.",
+        422,
+      );
+    }
+  };
+
   const checkRubric = async (fid: number, rubricId: number) => {
     if ((await festivalOf(ctx.sql, "rubric", rubricId)) !== fid) {
       throw new UserError("That rubric belongs to another festival.", 422);
@@ -844,10 +973,13 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
     const rubricId = int(f, "rubric_id");
     await checkRubric(fid, rubricId);
     const name = required(f, "name", "a name");
+    const rules = rulesFrom(f);
     await ctx.sql.begin(async (tx) => {
+      await requireAgeDate(tx, fid, rules);
       const [k] = await tx<{ id: number }[]>`
-        INSERT INTO competitions (festival_id, name, rubric_id)
-        VALUES (${fid}, ${name}, ${rubricId}) RETURNING id`;
+        INSERT INTO competitions (festival_id, name, rubric_id, gender, level, min_age, max_age)
+        VALUES (${fid}, ${name}, ${rubricId}, ${rules.gender}, ${rules.level},
+          ${rules.min_age}, ${rules.max_age}) RETURNING id`;
       await schedule(tx, k.id, sessionId);
     });
     return back(c, `/admin/f/${fid}/structure`, {
@@ -867,9 +999,17 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
     await checkRubric(fid, rubricId);
     const sessionId = await sessionFrom(f, fid);
     const name = required(f, "name", "a name");
+    const rules = rulesFrom(f);
     await ctx.sql.begin(async (tx) => {
+      // Locked like enter() locks it, so no entry is added between check and save.
+      await tx`SELECT id FROM competitions WHERE id = ${cid} FOR UPDATE`;
+      await requireAgeDate(tx, fid, rules);
       await tx`UPDATE competitions SET name = ${name}, rubric_id = ${rubricId},
-        open = ${f.open === "1"} WHERE id = ${cid}`;
+        open = ${
+        f.open === "1"
+      }, gender = ${rules.gender}, level = ${rules.level},
+        min_age = ${rules.min_age}, max_age = ${rules.max_age} WHERE id = ${cid}`;
+      await assertEntriesEligible(tx, { competitionId: cid }, "Those rules");
       await schedule(tx, cid, sessionId);
     });
     return back(c, `/admin/f/${fid}/structure`, { ok: "Competition saved." });
@@ -1363,9 +1503,14 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
         name: string;
         session_name: string | null;
         track_name: string | null;
+        gender: CompetitionGender;
+        level: CompetitionLevel;
+        min_age: number | null;
+        max_age: number | null;
       }[]
     >`
-      SELECT c.id, c.name, s.name AS session_name, t.name AS track_name
+      SELECT c.id, c.name, s.name AS session_name, t.name AS track_name,
+        c.gender, c.level, c.min_age, c.max_age
       FROM competitions c LEFT JOIN sessions s ON s.id = c.session_id
         LEFT JOIN tracks t ON t.id = s.track_id
       WHERE c.festival_id = ${fid}
@@ -1389,7 +1534,7 @@ export function adminRoutes(app: Hono<AppEnv>, ctx: AppContext) {
             return html`
               <h2>
                 ${k.name} <span class="muted small"
-                >${k.session_name
+                >${rulesLabel(k)} · ${k.session_name
                   ? `${k.track_name} · ${k.session_name}`
                   : "not scheduled"} · ${list.length} entries</span>
               </h2>

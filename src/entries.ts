@@ -3,6 +3,7 @@ import type { User } from "./auth.ts";
 import { type AppContext, nowOf } from "./context.ts";
 import { logEvent, type Tx } from "./db.ts";
 import { UserError } from "./errors.ts";
+import { assertEntriesEligible, eligibilityOf } from "./categories.ts";
 import { festivalOf, type FestivalState, festivalState } from "./festival.ts";
 import { closeGaps, nextOrder } from "./order.ts";
 
@@ -94,8 +95,25 @@ export async function addMember(
       404,
     );
   }
-  await ctx.sql`INSERT INTO competitor_members (competitor_id, user_id)
-    VALUES (${competitorId}, ${other.id}) ON CONFLICT DO NOTHING`;
+  await ctx.sql.begin(async (tx) => {
+    await tx`SELECT id FROM competitors WHERE id = ${competitorId} FOR UPDATE`;
+    const [p] = await tx<{ type: string; members: number }[]>`
+      SELECT p.type, (SELECT count(*)::int FROM competitor_members m
+        WHERE m.competitor_id = p.id) AS members
+      FROM competitors p WHERE p.id = ${competitorId}`;
+    if (p.type === "individual" && p.members >= 1) {
+      throw new UserError(
+        "An individual competitor has one member. Create a couple or a team instead.",
+        409,
+      );
+    }
+    if (p.type === "couple" && p.members >= 2) {
+      throw new UserError("A couple has two members.", 409);
+    }
+    await tx`INSERT INTO competitor_members (competitor_id, user_id)
+      VALUES (${competitorId}, ${other.id}) ON CONFLICT DO NOTHING`;
+    await assertEntriesEligible(tx, { competitorId }, "That change");
+  });
 }
 
 export async function removeMember(
@@ -105,13 +123,17 @@ export async function removeMember(
   memberId: number,
 ) {
   await assertMember(ctx.sql, user, competitorId);
-  const members = await ctx.sql`SELECT user_id FROM competitor_members
-    WHERE competitor_id = ${competitorId}`;
-  if (members.length <= 1) {
-    throw new UserError("A competitor needs at least one member.", 409);
-  }
-  await ctx.sql`DELETE FROM competitor_members
-    WHERE competitor_id = ${competitorId} AND user_id = ${memberId}`;
+  await ctx.sql.begin(async (tx) => {
+    await tx`SELECT id FROM competitors WHERE id = ${competitorId} FOR UPDATE`;
+    const members = await tx`SELECT user_id FROM competitor_members
+      WHERE competitor_id = ${competitorId}`;
+    if (members.length <= 1) {
+      throw new UserError("A competitor needs at least one member.", 409);
+    }
+    await tx`DELETE FROM competitor_members
+      WHERE competitor_id = ${competitorId} AND user_id = ${memberId}`;
+    await assertEntriesEligible(tx, { competitorId }, "That change");
+  });
 }
 
 export function checkDuration(seconds: number): number {
@@ -148,8 +170,20 @@ export async function enter(
   }
   try {
     return await ctx.sql.begin(async (tx) => {
-      // Serialise entries to one competition so order numbers do not collide.
+      // Serialise entries to one competition so order numbers do not collide,
+      // and so its rules cannot change between the check and the insert.
       await tx`SELECT id FROM competitions WHERE id = ${input.competitionId} FOR UPDATE`;
+      const problems = await eligibilityOf(
+        tx,
+        input.competitorId,
+        input.competitionId,
+      );
+      if (problems.length) {
+        throw new UserError(
+          `This competitor cannot enter: ${problems.join("; ")}.`,
+          409,
+        );
+      }
       const order = await nextOrder(tx, "entries", input.competitionId);
       const [row] = await tx<{ id: number }[]>`
         INSERT INTO entries (competition_id, competitor_id, duration, order_number)
